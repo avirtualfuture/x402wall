@@ -1,0 +1,262 @@
+/*.addr {
+    font-size: 10px;
+    color:blue;
+}
+
+.ident {
+    color: green;
+    padding: 0.5em;
+}*/
+
+
+:root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #f72585;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --success: #4cc9f0;
+            --card-bg: #ffffff;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            animation: fadeIn 1s ease;
+        }
+
+        header h1 {
+            font-size: 2.8rem;
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        header p {
+            color: var(--gray);
+            font-size: 1.2rem;
+        }
+
+        .post-form {
+            background: var(--card-bg);
+            border-radius: 0px;
+            padding: 0.5em;
+            box-shadow: 0 10px 30px var(--shadow);
+            animation: slideUp 0.8s ease;
+            border-color: var(--gray);
+            border-width: 2px;
+        }
+
+        .post-form h2 {
+            color: var(--primary);
+            font-size: 1.3rem;
+        }
+
+        .form-group {
+            margin-bottom: 0.25em;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        input, textarea {
+            
+            padding: 0.3em;
+            margin: 0.1em;
+            border: 2px solid #e2e8f0;
+            border-radius: 0px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        textarea {
+            min-height: 1em;
+            resize: vertical;
+            width: 70%;
+        }
+
+        .button {
+            background: var(--primary);
+            color: gold;
+            border: none;
+            padding: 0.5em;
+            border-radius: 3px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            /*align-items: center;*/
+            /*justify-content: center;*/
+            margin-left: 0.1em;
+            margin-top: 0.5em;
+        }
+
+        .button:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .button i {
+            margin-right: 8px;
+        }
+
+        
+        .cost {
+            margin-left: 15px;
+            font-size: 14px;
+            color: white;
+        }
+
+        
+
+        .messages-header {
+            display: flex;
+            align-items: center;
+            animation: fadeIn 1s ease;
+            margin:1em;
+        }
+
+        .messages-header h2 {
+            font-size: 2rem;
+            color: var(--dark);
+            margin-right: 15px;
+        }
+
+        .message-count {
+            background: var(--primary);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .messages-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .message-card {
+            background: var(--card-bg);
+            border-radius: 2px;
+            padding: 25px;
+            box-shadow: 0 5px 15px var(--shadow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeIn 0.5s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .message-id {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--primary);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 0 0 0 2px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .message-content {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: var(--dark);
+            line-height: 1.5;
+        }
+
+        .message-author {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .message-payer {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--gray);
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        .message-timestamp {
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        .divider {
+            height: 1px;
+            background: #e2e8f0;
+            margin: 15px 0;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding: 20px;
+            color: var(--gray);
+            font-size: 14px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .messages-list {
+                grid-template-columns: 1fr;
+            }
+            
+            header h1 {
+                font-size: 2.2rem;
+            }
+        }
