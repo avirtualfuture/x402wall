@@ -124,10 +124,6 @@ try {
     paymentMiddleware(
       process.env.SELLER_ADDRESS,
       {
-        "POST /wall": {
-          price: process.env.MESSAGE_PRICE,
-          network: process.env.NETWORK
-        },
         "GET /wall-paid": {
           price: process.env.MESSAGE_PRICE,
           network: process.env.NETWORK
