@@ -2,6 +2,8 @@
 
 This project shows how to use the [https://x402.org](x402) express middleware to implement a form and pay for submissions.
 
+![screenshot](image.png)
+
 ### Features:
 * no client side javascript
 * configurable through environment variables
