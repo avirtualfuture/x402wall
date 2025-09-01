@@ -42,3 +42,9 @@ sequenceDiagram
 
 The key takeaway is that the form post request stores a temporary message that then gets used by the flow with the payment.
 The advantage is that no client side javascript is needed, the middleware deals with the x402 paywall, the rest is just a query string for the pending message.
+
+## Setup
+Copy the .env.sample and configure the system.
+
+## Moderation
+Very rudimentary, do a `DELETE` to `/wall/id` and add a parameter called `adminPassword` to remove a post.
