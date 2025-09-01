@@ -3,6 +3,7 @@ import { paymentMiddleware } from "x402-express"
 import sqlite3 from "sqlite3"
 import crypto from "crypto"
 import dotenv from "dotenv"
+import path from 'path'
 
 // Load environment variables
 dotenv.config()
@@ -15,17 +16,28 @@ const PORT = process.env.PORT || 4021
 const app = express()
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+app.use(express.static(path.join(process.cwd(),'public')))
 
 // Initialize database
 const db = new sqlite3.Database(DB_PATH)
+
+const decodeX402Header = (content)=>{
+  const decodedJsonString = atob(content) // Decodes from Base64
+  const transactionData = JSON.parse(decodedJsonString)
+  return transactionData
+}
 
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(req.method + " "+ req.path, {
     body: JSON.stringify(req.body),
     query: req.query,
-    payment: !!req.headers['x-payment']
+    payment: req.headers['x-payment']
   })
+  if(!!req.headers['x-payment']){
+    req.paymentHeader = decodeX402Header(req.headers['x-payment'])
+    console.log(req.paymentHeader)
+  }
   next()
 })
 
@@ -36,6 +48,7 @@ db.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message TEXT,
     author TEXT,
+    payer TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `, (err) => {
@@ -60,6 +73,22 @@ db.run(`
     console.log("Pending messages table created or already exists");
   }
 });
+
+
+function escapeHtml(text) {
+    if (typeof text !== 'string') return '';
+    
+    const escapeMap = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#x27;',
+        '/': '&#x2F;'
+    };
+    
+    return text.replace(/[&<>"'/]/g, char => escapeMap[char]);
+}
 
 // Middleware section
 
@@ -97,9 +126,11 @@ app.use((req, res, next) => {
     const pendingId = crypto.randomUUID()
     console.log("storing message:", req.body.message,"from", req.body?.author , "with id", pendingId)
     let author = req.body?.author || "anon"
-    
+    author = author.substr(0,100)
+    let message = req.body.message.substr(0,1024)
+    message = escapeHtml(message)
     db.run(
-      `INSERT INTO pending_messages (pending_id, message, author) VALUES (?, ?, ?)`, [pendingId, req.body.message, author],
+      `INSERT INTO pending_messages (pending_id, message, author) VALUES (?, ?, ?)`, [pendingId, message, author],
       (err) => {
         if (err) {
           console.error("Error saving pending message:", err)
@@ -161,10 +192,10 @@ app.get("/wall-paid", (req, res) => {
       }
       // Save the message to the main table
       db.run(
-        `INSERT INTO messages (message, author) VALUES (?,?)`,[row.message, row.author],
+        `INSERT INTO messages (message, author, payer) VALUES (?,?,?)`,[row.message, row.author, req.paymentHeader.payload.authorization.from],
         function (err) {
           if (err) {
-            console.error("❌ Error saving message:", err)
+            console.error("Error saving message:", err)
             return res.status(500).send("Error saving message")
           }
           
@@ -200,8 +231,8 @@ app.post("/wall", (req, res) => {
  * GET /wall route handler
  * Displays the main message wall page with all posted messages
  */
-app.get("/wall", (req, res) => {
-  db.all(`SELECT message,timestamp,author FROM messages ORDER BY timestamp DESC`, [], (err, rows) => {
+app.get(["/","/wall"], (req, res) => {
+  db.all(`SELECT id,message,timestamp,author,payer FROM messages ORDER BY timestamp DESC`, [], (err, rows) => {
     if (err) return res.status(500).send("Error retrieving messages")
     const html = generateWallHTML(rows)
     res.send(html)
@@ -209,25 +240,64 @@ app.get("/wall", (req, res) => {
 })
 
 /**
+ * DELETE /wall/:id route handler
+ * Deletes a message by its ID if the correct admin password is provided
+ */
+app.delete("/wall/:id", (req, res) => {
+  const messageId = req.params.id;
+  const adminPassword = req.body.adminPassword || req.headers['admin-password'];
+  
+  // Verify admin password
+  if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).send("Unauthorized: Invalid admin password");
+  }
+  
+  // Delete the message with the specified ID
+  db.run(`DELETE FROM messages WHERE id = ?`, [messageId], function(err) {
+    if (err) {
+      console.error("Error deleting message:", err);
+      return res.status(500).send("Error deleting message");
+    }
+    
+    // Check if a row was actually deleted
+    if (this.changes === 0) {
+      return res.status(404).send("Message not found");
+    }
+    
+    console.log(`Message ${messageId} deleted successfully`);
+    res.status(200).send("Message deleted successfully");
+  });
+})
+
+
+/**
  * Generate HTML for the message wall page
  * @param {Array} messages - Array of message objects
  * @returns {string} HTML string for the message wall
  */
 function generateWallHTML(messages) {
-  let html = "<html><head><title>Message Wall x402 example</title></head><body>"
-  html += "<h1>Post a Message</h1>"
+  let html = "<html><head>"
+  //html += '<link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">'
+  html += '<link rel="stylesheet" href="./wall.css">'
+  html += "<title>Message Wall x402 example</title></head><body>"
+  html += "<div class='messages-header'><h2>x402 MESSAGE WALL</h2>"
+  html += `<p>Leave a public message for $0.001 USDC (BASE Sepolia) using the <a href="https://www.x402.org/">x402 standard</a></div>`
+  html += '<div class="post-form">'
+  html += "<h2>Post a Message</h2>"
   html += '<form action="/wall" method="POST">'
-  html += '<input type="text" name="message" placeholder="Enter your message" required>'
-  html += '<input type="text" name="author" placeholder="anon">'
-  html += '<button type="submit">POST ($0.001 USDC)</button>'
-  html += "</form>"
-  html += "<h1>MESSAGE WALL</h1><ul>"
-  
+  html += '<div id="form-group"><textarea maxlength="1024" name="message" id="message" placeholder="Enter your message" required></textarea></div>'
+  html += '<div id="form-group"><input maxlength="100" type="text" name="author" placeholder="your name"></div>'
+  html += '<div id="form-group"><button type="submit" class="button">POST<span class="cost">($0.001 USDC)</span></button></div>'
+  html += "</form></div>"
+
+  html += "<div class='messages-header'><h2>MESSAGES</h2></div>"
+  html += '<div class="messages-list">'
   messages.forEach((row) => {
-    html += `<li>${row.message} (${row.timestamp}) by ${row.author}</li>`
+    html += `<div class="message-card"><span class="message-id">#${row.id}</span><p class="message-content">${row.message}</p>`
+    html += `<div class="divider"></div><p class="message-author">by ${row.author}</p><p class="message-payer">[${row.payer}]</p>`
+    html += `<p class="message-timestamp">(${row.timestamp})</p></div>`
   })
-  
-  html += "</ul>"
+  html +="</div>"
   html += `<script> window.onload = (e)=>{console.log("ONLOAD"); history.replaceState(null, '', '/wall')}</script>`
   html += "</body></html>"
   
