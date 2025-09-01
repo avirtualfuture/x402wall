@@ -4,12 +4,18 @@ import sqlite3 from "sqlite3"
 import crypto from "crypto"
 import dotenv from "dotenv"
 import path from 'path'
+import fs from 'fs'
 
-// Load environment variables
 dotenv.config()
 
+// Ensure data directory exists
+const dataDir = path.dirname(process.env.DB_PATH || "./data/wall.db")
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true })
+}
+
 // Constants
-const DB_PATH = process.env.DB_PATH || "./wall.db"
+const DB_PATH = process.env.DB_PATH || "./data/wall.db"
 const PORT = process.env.PORT || 4021
 
 // Initialize Express app
@@ -338,9 +344,22 @@ console.log("Server setup complete");
 const shutdown = () => {
   console.debug('SIGTERM/SIGINT signal received: closing HTTP server')
   server.close(() => {
-    db.close();
-    console.debug('HTTP server closed')
+    db.close((err) => {
+      if (err) {
+        console.error('Error closing database:', err)
+      } else {
+        console.debug('Database closed')
+      }
+      console.debug('HTTP server closed')
+      process.exit(0)
+    })
   })
+  
+  // Force shutdown if graceful shutdown takes too long
+  setTimeout(() => {
+    console.error('Forcing shutdown due to timeout')
+    process.exit(1)
+  }, 10000)
 }
 
 process.on('SIGTERM', shutdown)
