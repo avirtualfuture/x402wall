@@ -5,6 +5,7 @@ import crypto from "crypto"
 import dotenv from "dotenv"
 import path from 'path'
 import fs from 'fs'
+import pg from 'pg'
 
 dotenv.config()
 
@@ -24,8 +25,7 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(express.static(path.join(process.cwd(),'public')))
 
-// Initialize database
-const db = new sqlite3.Database(DB_PATH)
+
 
 const decodeX402Header = (content)=>{
   const decodedJsonString = atob(content) // Decodes from Base64
@@ -47,9 +47,78 @@ app.use((req, res, next) => {
   next()
 })
 
-// Database initialization
+
+let pgclient = undefined
+let sqlitedb = undefined
+
+if(process.env.USE_PG){
+
+const config = {
+    user: process.env.PG_USER,
+    password: process.env.PG_PASSWORD,
+    host: process.env.PG_HOST,
+    port: process.env.PG_PORT,
+    database: process.env.PG_DB,
+    ssl: {
+        rejectUnauthorized: true,
+        ca: fs.readFileSync("./etc/secrets/ca.pem")
+    },
+};
+
+pgclient = new pg.Client(config);
+pgclient.connect(function (err) {
+    if (err) {
+        console.error("Error connecting to PostgreSQL:", err);
+        throw err;
+    }
+    
+    console.log("Connected to PostgreSQL database");
+    
+    // Create messages table
+    const createMessagesTable = `
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        message TEXT,
+        author TEXT,
+        payer TEXT,
+        timestamp TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      )
+    `;
+    
+    pgclient.query(createMessagesTable, (err) => {
+      if (err) {
+        console.error("Error creating messages table:", err.message);
+        console.error("Table creation query:", createMessagesTable);
+      } else {
+        console.log("Messages table created or already exists");
+      }
+    });
+    
+    // Create pending_messages table
+    const createPendingMessagesTable = `
+      CREATE TABLE IF NOT EXISTS pending_messages (
+        pending_id TEXT PRIMARY KEY,
+        message TEXT,
+        author TEXT
+      )
+    `;
+    
+    pgclient.query(createPendingMessagesTable, (err) => {
+      if (err) {
+        console.error("Error creating pending_messages table:", err.message);
+        console.error("Table creation query:", createPendingMessagesTable);
+      } else {
+        console.log("Pending messages table created or already exists");
+      }
+    });
+})
+
+}else{ // use SQLITE
+ // Database initialization
+// Initialize database
+sqlitedb = new sqlite3.Database(DB_PATH)
 // Create messages table
-db.run(`
+sqlitedb.run(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message TEXT,
@@ -66,19 +135,19 @@ db.run(`
 });
 
 // Create pending_messages table
-db.run(`
+sqlitedb.run(`
   CREATE TABLE IF NOT EXISTS pending_messages (
     pending_id TEXT PRIMARY KEY,
     message TEXT,
     author TEXT
-  )
-`, (err) => {
+  )`, (err) => {
   if (err) {
     console.error("Error creating pending_messages table:", err);
   } else {
     console.log("Pending messages table created or already exists");
   }
 });
+}
 
 
 function escapeHtml(text) {
@@ -106,18 +175,32 @@ app.use((req, res, next) => {
   
   // detect used pendingId
   if(req.method == "GET" && req.path === "/wall-paid" && req.query?.pendingId){
-    db.get(`SELECT message, author FROM pending_messages WHERE pending_id = ?`, [req.query.pendingId],
-    (err, row) => {
-      if (err || !row) {
-        console.error("Pending message not found for id:", req.query.pendingId)
-        //return res.status(400).send("Pending message not found")
-        return res.redirect("/wall")
-      }
-      // If we found the row, we should continue to let the next middleware/route handle it
-      next()
-    })
-    // Return to prevent further execution in this middleware
-    return
+    if(process.env.USE_PG){
+      
+      pgclient.query('SELECT message, author FROM pending_messages WHERE pending_id = $1 LIMIT 1', [req.query.pendingId], (err, result) => {
+        if (err || result.rows.length === 0) {
+          console.error("Pending message not found for id:", req.query.pendingId)
+          return res.redirect("/wall")
+        }
+        // If we found the row, we should continue to let the next middleware/route handle it
+        next()
+      })
+      // Return to prevent further execution in this middleware
+      return
+    }else{
+      sqlitedb.get(`SELECT message, author FROM pending_messages WHERE pending_id = ?`, [req.query.pendingId],
+      (err, row) => {
+        if (err || !row) {
+          console.error("Pending message not found for id:", req.query.pendingId)
+          //return res.status(400).send("Pending message not found")
+          return res.redirect("/wall")
+        }
+        // If we found the row, we should continue to let the next middleware/route handle it
+        next()
+      })
+      // Return to prevent further execution in this middleware
+      return
+    }
   }
   
   if (req.method === "POST" && req.path === "/wall" && req.body?.message) {
@@ -135,17 +218,31 @@ app.use((req, res, next) => {
     author = author.substr(0,100)
     let message = req.body.message.substr(0,1024)
     message = escapeHtml(message)
-    db.run(
-      `INSERT INTO pending_messages (pending_id, message, author) VALUES (?, ?, ?)`, [pendingId, message, author],
-      (err) => {
-        if (err) {
-          console.error("Error saving pending message:", err)
-          return res.status(500).send("Error saving message")
+    if(process.env.USE_PG){
+      pgclient.query(
+        `INSERT INTO pending_messages (pending_id, message, author) VALUES ($1, $2, $3)`, [pendingId, message, author],
+        (err) => {
+          if (err) {
+            console.error("Error saving pending message:", err)
+            return res.status(500).send("Error saving message")
+          }
+          // Redirect to the paywalled GET route with pendingId
+          res.redirect(`/wall-paid?pendingId=${pendingId}`)
         }
-        // Redirect to the paywalled GET route with pendingId
-        res.redirect(`/wall-paid?pendingId=${pendingId}`)
-      }
-    )
+      )
+    }else{
+      sqlitedb.run(
+        `INSERT INTO pending_messages (pending_id, message, author) VALUES (?, ?, ?)`, [pendingId, message, author],
+        (err) => {
+          if (err) {
+            console.error("Error saving pending message:", err)
+            return res.status(500).send("Error saving message")
+          }
+          // Redirect to the paywalled GET route with pendingId
+          res.redirect(`/wall-paid?pendingId=${pendingId}`)
+        }
+      )
+    }
   } else {
     next()
   }
@@ -190,14 +287,47 @@ app.get("/wall-paid", (req, res) => {
   }
 
   console.log("Finalizing message pendingId:", pendingId)
-  db.get(`SELECT message, author FROM pending_messages WHERE pending_id = ?`, [pendingId],
+  if(process.env.USE_PG){
+    pgclient.query('SELECT message, author FROM pending_messages WHERE pending_id = $1', [pendingId], (err, result) => {
+      if (err || result.rows.length === 0) {
+        console.error("Pending message not found for id:", pendingId)
+        return res.redirect("/wall")
+      }
+      const row = result.rows[0];
+      // Save the message to the main table
+      pgclient.query(
+        `INSERT INTO messages (message, author, payer) VALUES ($1, $2, $3) RETURNING id`, [row.message, row.author, req.paymentHeader.payload.authorization.from],
+        (err, insertResult) => {
+          if (err) {
+            console.error("Error saving message:", err)
+            return res.status(500).send("Error saving message")
+          }
+          
+          // Clean up pending message
+          pgclient.query(`DELETE FROM pending_messages WHERE pending_id = $1`, [pendingId], (deleteErr) => {
+            if (deleteErr) {
+              console.error("Error deleting pending message:", deleteErr)
+            }
+            
+            // this.lastID is the last inserted row id
+            console.log("Message SAVED ID:", insertResult.rows[0].id)
+            
+            // Redirect after all database operations are complete
+            res.redirect(301, "/wall")
+          })
+        }
+      )
+    })
+  }
+  else{
+  sqlitedb.get(`SELECT message, author FROM pending_messages WHERE pending_id = ?`, [pendingId],
     (err, row) => {
       if (err || !row) {
         console.error("Pending message not found for id:", pendingId)
         return res.redirect("/wall")
       }
       // Save the message to the main table
-      db.run(
+      sqlitedb.run(
         `INSERT INTO messages (message, author, payer) VALUES (?,?,?)`,[row.message, row.author, req.paymentHeader.payload.authorization.from],
         function (err) {
           if (err) {
@@ -206,7 +336,7 @@ app.get("/wall-paid", (req, res) => {
           }
           
           // Clean up pending message
-          db.run(`DELETE FROM pending_messages WHERE pending_id = ?`, [pendingId], (deleteErr) => {
+          sqlitedb.run(`DELETE FROM pending_messages WHERE pending_id = ?`, [pendingId], (deleteErr) => {
             if (deleteErr) {
               console.error("Error deleting pending message:", deleteErr)
             }
@@ -221,6 +351,7 @@ app.get("/wall-paid", (req, res) => {
       )
     }
   )
+}
 })
 
 /**
@@ -238,11 +369,20 @@ app.post("/wall", (req, res) => {
  * Displays the main message wall page with all posted messages
  */
 app.get(["/","/wall"], (req, res) => {
-  db.all(`SELECT id,message,timestamp,author,payer FROM messages ORDER BY timestamp DESC`, [], (err, rows) => {
-    if (err) return res.status(500).send("Error retrieving messages")
-    const html = generateWallHTML(rows)
-    res.send(html)
-  })
+  if(process.env.USE_PG){
+    pgclient.query(`SELECT id,message,to_char(timestamp AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS UTC') as timestamp_utc,author,payer FROM messages ORDER BY timestamp_utc DESC`, (err, result) => {
+      if (err) return res.status(500).send("Error retrieving messages")
+      const rows = result.rows;
+      const html = generateWallHTML(rows)
+      res.send(html)
+    })
+  }else{
+    sqlitedb.all(`SELECT id,message,timestamp AS timestamp_utc,author,payer FROM messages ORDER BY timestamp DESC`, [], (err, rows) => {
+      if (err) return res.status(500).send("Error retrieving messages")
+      const html = generateWallHTML(rows)
+      res.send(html)
+    })
+  }
 })
 
 /**
@@ -259,20 +399,37 @@ app.delete("/wall/:id", (req, res) => {
   }
   
   // Delete the message with the specified ID
-  db.run(`DELETE FROM messages WHERE id = ?`, [messageId], function(err) {
-    if (err) {
-      console.error("Error deleting message:", err);
-      return res.status(500).send("Error deleting message");
-    }
-    
-    // Check if a row was actually deleted
-    if (this.changes === 0) {
-      return res.status(404).send("Message not found");
-    }
-    
-    console.log(`Message ${messageId} deleted successfully`);
-    res.status(200).send("Message deleted successfully");
-  });
+  if(process.env.USE_PG){
+    pgclient.query('DELETE FROM messages WHERE id = $1', [messageId], (err, result) => {
+      if (err) {
+        console.error("Error deleting message:", err);
+        return res.status(500).send("Error deleting message");
+      }
+      
+      // Check if a row was actually deleted
+      if (result.rowCount === 0) {
+        return res.status(404).send("Message not found");
+      }
+      
+      console.log(`Message ${messageId} deleted successfully`);
+      res.status(200).send("Message deleted successfully");
+    });
+  }else{
+    sqlitedb.run(`DELETE FROM messages WHERE id = ?`, [messageId], function(err) {
+      if (err) {
+        console.error("Error deleting message:", err);
+        return res.status(500).send("Error deleting message");
+      }
+      
+      // Check if a row was actually deleted
+      if (this.changes === 0) {
+        return res.status(404).send("Message not found");
+      }
+      
+      console.log(`Message ${messageId} deleted successfully`);
+      res.status(200).send("Message deleted successfully");
+    });
+  }
 })
 
 
@@ -301,7 +458,7 @@ function generateWallHTML(messages) {
   messages.forEach((row) => {
     html += `<div class="message-card"><span class="message-id">#${row.id}</span><p class="message-content">${row.message}</p>`
     html += `<div class="divider"></div><p class="message-author">by ${row.author}</p><p class="message-payer">[${row.payer}]</p>`
-    html += `<p class="message-timestamp">(${row.timestamp})</p></div>`
+    html += `<p class="message-timestamp">(${row.timestamp_utc})</p></div>`
   })
   html +="</div>"
   html += `<script> window.onload = (e)=>{console.log("ONLOAD"); history.replaceState(null, '', '/wall')}</script>`
@@ -344,15 +501,27 @@ console.log("Server setup complete");
 const shutdown = () => {
   console.debug('SIGTERM/SIGINT signal received: closing HTTP server')
   server.close(() => {
-    db.close((err) => {
-      if (err) {
-        console.error('Error closing database:', err)
-      } else {
-        console.debug('Database closed')
-      }
-      console.debug('HTTP server closed')
-      process.exit(0)
-    })
+    if(process.env.USE_PG){
+      pgclient.end((err) => {
+        if (err) {
+          console.error('Error closing PostgreSQL connection:', err)
+        } else {
+          console.debug('PostgreSQL connection closed')
+        }
+        console.debug('HTTP server closed')
+        process.exit(0)
+      })
+    }else{
+      sqlitedb.close((err) => {
+        if (err) {
+          console.error('Error closing database:', err)
+        } else {
+          console.debug('Database closed')
+        }
+        console.debug('HTTP server closed')
+        process.exit(0)
+      })
+    }
   })
   
   // Force shutdown if graceful shutdown takes too long
