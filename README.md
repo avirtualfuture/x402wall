@@ -48,7 +48,6 @@ The advantage is that no client side javascript is needed, the middleware deals 
 
 ## Setup
 Copy the .env.sample and configure the system.
-For postgres place your ca.pem inside etc/secrets
 
 ## Moderation
 Very rudimentary, do a `DELETE` to `/wall/id` and add a parameter called `adminPassword` to remove a post.
