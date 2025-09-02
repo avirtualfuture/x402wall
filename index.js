@@ -27,6 +27,7 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cors())
 
 app.use(express.static(path.join(process.cwd(),'public')))
+
 /*app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -273,6 +274,10 @@ try {
         "GET /wall-paid": {
           price: process.env.MESSAGE_PRICE,
           network: process.env.NETWORK
+        },
+        "GET /test":{
+          price: process.env.MESSAGE_PRICE,
+          network: process.env.NETWORK
         }
       },
       {
@@ -285,6 +290,10 @@ try {
 }
 
 // Route handlers
+
+app.get("/test", (req,res)=>{
+  res.send("it works")
+})
 
 /**
  * Handle the paywalled route that finalizes the message
