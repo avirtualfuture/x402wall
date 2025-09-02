@@ -6,6 +6,7 @@ import dotenv from "dotenv"
 import path from 'path'
 import fs from 'fs'
 import pg from 'pg'
+import cors from 'cors'
 
 dotenv.config()
 
@@ -23,16 +24,19 @@ const PORT = process.env.PORT || 4021
 const app = express()
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-app.use(express.static(path.join(process.cwd(),'public')))
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  res.header('Cross-Origin-Embedder-Policy', 'require-corp');
-  next();
-});
+app.use(cors())
 
+app.use(express.static(path.join(process.cwd(),'public')))
+/*app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*')
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+  res.header('Cross-Origin-Embedder-Policy', 'require-corp')
+  res.header("Access-Control-Expose-Headers", "X-PAYMENT-RESPONSE")
+  next()
+});
+*/
 
 
 const decodeX402Header = (content)=>{
