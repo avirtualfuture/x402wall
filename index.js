@@ -10,14 +10,10 @@ import cors from 'cors'
 
 dotenv.config()
 
-// Ensure data directory exists
-const dataDir = path.dirname(process.env.DB_PATH || "./data/wall.db")
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true })
-}
+
 
 // Constants
-const DB_PATH = process.env.DB_PATH || "./data/wall.db"
+
 const PORT = process.env.PORT || 4021
 
 // Initialize Express app
@@ -27,18 +23,6 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cors())
 
 app.use(express.static(path.join(process.cwd(),'public')))
-
-/*app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-  res.header('Cross-Origin-Embedder-Policy', 'require-corp')
-  res.header("Access-Control-Expose-Headers", "X-PAYMENT-RESPONSE")
-  next()
-});
-*/
-
 
 const decodeX402Header = (content)=>{
   const decodedJsonString = atob(content) // Decodes from Base64
@@ -65,7 +49,7 @@ let pgclient = undefined
 let sqlitedb = undefined
 
 if(process.env.USE_PG){
-
+// USE POSTGRES
 const config = {
     user: process.env.PG_USER,
     password: process.env.PG_PASSWORD,
@@ -126,9 +110,18 @@ pgclient.connect(function (err) {
     });
 })
 
-}else{ // use SQLITE
- // Database initialization
+}else{
+// use SQLITE
+// Database initialization
 // Initialize database
+
+const DB_PATH = process.env.DB_PATH || "./data/wall.db"
+// Ensure data directory exists
+const dataDir = path.dirname(process.env.DB_PATH || "./data/wall.db")
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true })
+}
+
 sqlitedb = new sqlite3.Database(DB_PATH)
 // Create messages table
 sqlitedb.run(`
