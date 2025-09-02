@@ -69,7 +69,7 @@ const config = {
     database: process.env.PG_DB,
     ssl: {
         rejectUnauthorized: true,
-        ca: fs.readFileSync("./etc/secrets/ca.pem")
+        ca: fs.readFileSync("etc/secrets/ca.pem")
     },
 };
 
